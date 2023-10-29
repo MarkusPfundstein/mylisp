@@ -19,6 +19,18 @@ ALL STARTUP TESTS PASSED!
 Welcome to MyLisp.
 >> (+ 5 3)
 [n] 8
+>> (cons 'alice 'bob)
+[c] ('alice 'bob)
+>> (car (cons 'alice 'bob))
+[s] 'alice
+>> (cdr (cons 'alice 'bob))
+[s] 'bob
+>> (cons 'M (cons 'y (cons 'L (cons 'i (cons 's (cons 'p))))))
+[c] ('M 'y 'L 'i 's 'p)
+>> (quote (cons 'M (cons 'y (cons 'L (cons 'i (cons 's (cons 'p)))))))
+[c] (cons 'M (cons 'y (cons 'L (cons 'i (cons 's (cons 'p))))))
+>> (eval (quote (cons 'M (cons 'y (cons 'L (cons 'i (cons 's (cons 'p))))))))
+[c] ('M 'y 'L 'i 's 'p)
 >> (dump)
 nil
 >> (set 'x 10)
