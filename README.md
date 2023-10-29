@@ -19,6 +19,8 @@ ALL STARTUP TESTS PASSED!
 Welcome to MyLisp.
 >> (+ 5 3)
 [n] 8
+>> *
+[n] 8
 >> (cons 'alice 'bob)
 [c] ('alice 'bob)
 >> (car (cons 'alice 'bob))

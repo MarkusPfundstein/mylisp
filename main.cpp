@@ -19,7 +19,7 @@ void sig_handler(int s) {
   }
 }
 
-#define DEBUG_TRACE true;
+// #define DEBUG_TRACE;
 
 typedef double symbol_number_type;
 
@@ -34,9 +34,9 @@ struct LispType {
     function
   };
 
-  Type type;
+  Type type = Type::nil;
   
-  symbol_number_type number_val;
+  symbol_number_type number_val = 0.0;
   std::string string_val;
   std::shared_ptr<ConsCell> cons_val;
 };
@@ -107,13 +107,23 @@ struct ConsCell {
   std::shared_ptr<ConsCell> tail;
 
   ConsCell(const LispType &_h)
-    : head(_h) {}
+    : head(_h) {
+  }
   ConsCell(LispType &&_h)
-    : head(std::move(_h)) {}
+    : head(std::move(_h)) {
+  }
   ConsCell(const LispType &_h, const std::shared_ptr<ConsCell> &_t)
     : head(_h), tail(_t) {}
   ConsCell(LispType &&_h, const std::shared_ptr<ConsCell> &_t)
     : head(std::move(_h)), tail(_t) {}
+
+  ~ConsCell() {
+    head = make_nil();
+    tail = nullptr;
+#ifdef DEBUG_TRACE
+    std::cout << "delete conscell\n";
+#endif
+  }
   
   ConsCell(const ConsCell &other) = default;
   ConsCell(ConsCell &&other) = default;
@@ -316,14 +326,14 @@ void builtin_cons(const std::vector<LispType> &args, LispType &result_sym)
 
 void builtin_car(const std::vector<LispType> &args, LispType &result_sym)
 {
-  if (args.size() > 1) {
+  if (args.size() != 1) {
     throw std::runtime_error("car requires 0 or 1 arg");
   }
   if (args[0].type == LispType::Type::nil) {
     result_sym = make_nil();
     return;
   }
-  else if (args[0].type != LispType::Type::cons) {
+  if (args[0].type != LispType::Type::cons) {
     throw std::runtime_error("car arg0 must be cons cell");
   }
 
@@ -334,6 +344,10 @@ void builtin_cdr(const std::vector<LispType> &args, LispType &result_sym)
 {
   if (args.size() != 1) {
     throw std::runtime_error("cdr requires 1 arg");
+  }
+  if (args[0].type == LispType::Type::nil) {
+    result_sym = make_nil();
+    return;
   }
   if (args[0].type != LispType::Type::cons) {
     throw std::runtime_error("cdr arg0 must be cons cell");
@@ -559,12 +573,12 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
     if (tail != nullptr) {
       // only eval if no quote
       if (eval_tail) {
-        LispType return_val;
-        g_indent.depth++;
-        eval(tail->head, return_val, args);
-        g_indent.depth--;
+        if (tail->head.type != LispType::Type::nil) {
+          LispType return_val;
+          g_indent.depth++;
+          eval(tail->head, return_val, args);
+          g_indent.depth--;
 
-        if (return_val.type != LispType::Type::nil) {
           args.push_back(return_val);
         }
       } else {
@@ -599,14 +613,12 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
 void eval(const LispType& code, LispType &result)
 {
   std::vector<LispType> args;
-  result = make_nil();
   eval(code, result, args);
 }
 
 
 void parse(std::string sexp, LispType &root)
 {
-  root = make_nil();
   std::istringstream input(sexp);
   std::stringstream stream;
   std::string sym;
@@ -616,7 +628,7 @@ void parse(std::string sexp, LispType &root)
 
   std::stack<LispType> func_stack;
   std::stack<std::vector<LispType>> args_stack;
-  
+
   do {
     char token = input.get();
     switch (token) {
@@ -684,32 +696,69 @@ void parse(std::string sexp, LispType &root)
 
 void parse_and_eval(const std::string &sexp, LispType &code, LispType &result)
 {
+  // handle some special cases
+  if (sexp == "*") {
+    // do nothing and print result again
+    return;
+  }
+
+  result = make_nil();
   parse(sexp, code);
+  
   eval(code, result);
+  code = make_nil();
 }
+
+#define RUN_STARTUP_TESTS
 
 int main(int argc, char **argv)
 {
   init_builtins();
-  
   LispType code;
   LispType result;
+  
+#ifdef RUN_STARTUP_TESTS
+  assert(code.type == LispType::Type::nil);
+  assert(result.type == LispType::Type::nil);
+  
+  parse_and_eval("(+ 5 3)", code, result);
+
+  assert(result.type == LispType::Type::number);
+  assert(result.number_val == 8.0);
+  assert(code.type == LispType::Type::nil);
   
   parse_and_eval("(+ 5.90  (-  10 2.1) (* 2 2))", code, result);
 
   assert(result.type == LispType::Type::number);
   assert(result.number_val == 17.8);
 
-  parse_and_eval("(+ 5 3)", code, result);
-
-  assert(result.type == LispType::Type::number);
-  assert(result.number_val == 8.0);
-
   parse_and_eval("(+ (+ 3 (/ 8 3) (* (- 10 (+ 3 (* 2 (- 80 79))) 5) 8) (+ 7 (- 6 2))))", code, result);
 
   assert(result.type == LispType::Type::number);
   assert(result.number_val >= 16.6665 && result.number_val <= 16.6668);//6.9667);
 
+  parse_and_eval("(cons 'a 'b)", code, result);
+
+  assert(result.type == LispType::Type::cons);
+
+  parse_and_eval("(car (cons 'a 'b))", code, result);
+
+  assert(result.type == LispType::Type::symbol);
+  assert(result.string_val == "a");
+
+  parse_and_eval("(cdr (cons 'a 'b))", code, result);
+
+  assert(result.type == LispType::Type::symbol);
+  assert(result.string_val == "b");
+
+  parse_and_eval("(car nil)", code, result);
+
+  assert(result.type == LispType::Type::nil);
+
+  parse_and_eval("(cdr nil)", code, result);
+
+  assert(result.type == LispType::Type::nil);
+  
   parse_and_eval("(set 'x 5)", code, result);
   parse_and_eval("(set 'y 3)", code, result);
   parse_and_eval("(* x y)", code, result);
@@ -745,7 +794,9 @@ int main(int argc, char **argv)
 
   g_variables.clear();
   
-  std::cout << "ALL STARTUP TESTS PASSED!\n\nWelcome to MyLisp.\n";
+  std::cout << "ALL STARTUP TESTS PASSED!\n\n";
+#endif
+  std::cout << "Welcome to MyLisp.\n";
 
   struct sigaction sa;
   sa.sa_handler = sig_handler;
@@ -771,7 +822,7 @@ int main(int argc, char **argv)
       std::cout << "Error: " << e.what() << "\n";
     } catch (std::bad_function_call &e) {
       std::cout << "Error: " << e.what() << "\n";
-    }
+    } 
   }
   
   return 0;
