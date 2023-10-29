@@ -99,6 +99,9 @@ void print_lisp_type(const LispType &sym, bool with_type, std::ostream& o = std:
   }
 }
 
+void eval(const LispType& code, LispType &result);
+void parse(std::string sexp, LispType &root);
+
 struct ConsCell {
   LispType head;
   std::shared_ptr<ConsCell> tail;
@@ -272,6 +275,12 @@ void builtin_set(const std::vector<LispType> &args, LispType &result_sym)
       .number_val = val.number_val
     };
     break;
+  case LispType::Type::symbol:
+    g_variables[symbol_name] = {
+      .type = LispType::Type::symbol,
+      .string_val = val.string_val
+    };
+    break;
   case LispType::Type::nil:
     g_variables[symbol_name] = {
       .type = LispType::Type::nil
@@ -430,13 +439,9 @@ void builtin_exit(const std::vector<LispType> &args, LispType &result_sym)
 
 void init_builtins()
 {
-  g_builtins["add"] = builtin_add;
   g_builtins["+"] = builtin_add;
-  g_builtins["min"] = builtin_min;
   g_builtins["-"] = builtin_min;
   g_builtins["/"] = builtin_div;
-  g_builtins["div"] = builtin_div;
-  g_builtins["mul"] = builtin_mul;
   g_builtins["*"] = builtin_mul;
   g_builtins["print"] = builtin_print;
   g_builtins["set"] = builtin_set;
@@ -447,6 +452,7 @@ void init_builtins()
   g_builtins["nth"] = builtin_nth;
   g_builtins["list"] = builtin_list;
   g_builtins["exit"] = builtin_exit;
+  //  g_builtins["quote"] = builtin_quite;
 }
 
 bool read_sexp(std::istringstream &input)
@@ -678,6 +684,7 @@ void parse(std::string sexp, LispType &root)
 
 void parse_and_eval(const std::string &sexp, LispType &code, LispType &result)
 {
+  result = make_nil();
   parse(sexp, code);
   eval(code, result);
 }
@@ -689,37 +696,39 @@ int main(int argc, char **argv)
   LispType code;
   LispType result;
   
-  parse("(+ 5.90  (-  10 2.1) (* 2 2))", code);
-
-  eval(code, result);
+  parse_and_eval("(+ 5.90  (-  10 2.1) (* 2 2))", code, result);
 
   assert(result.type == LispType::Type::number);
   assert(result.number_val == 17.8);
 
-  parse("(+ 5 3)", code);
-  eval(code, result);
+  parse_and_eval("(+ 5 3)", code, result);
 
   assert(result.type == LispType::Type::number);
   assert(result.number_val == 8.0);
 
-  parse("(+ (+ 3 (/ 8 3) (* (- 10 (+ 3 (* 2 (- 80 79))) 5) 8) (+ 7 (- 6 2))))", code);
-  eval(code, result);
+  parse_and_eval("(+ (+ 3 (/ 8 3) (* (- 10 (+ 3 (* 2 (- 80 79))) 5) 8) (+ 7 (- 6 2))))", code, result);
 
   assert(result.type == LispType::Type::number);
   assert(result.number_val >= 16.6665 && result.number_val <= 16.6668);//6.9667);
 
-  parse("(set 'x 5)", code);
-  eval(code, result);
-
-  parse("(set 'y 3)", code);
-  eval(code, result);
-
-  parse("(* x y)", code);
-  eval(code, result);
+  parse_and_eval("(set 'x 5)", code, result);
+  parse_and_eval("(set 'y 3)", code, result);
+  parse_and_eval("(* x y)", code, result);
 
   assert(result.type == LispType::Type::number);
   assert(result.number_val == 15);
 
+  parse_and_eval("(set 'z (list 1 2 3))", code, result);
+
+  assert(result.type == LispType::Type::cons);
+
+  parse_and_eval("(nth 1 z)", code, result);
+
+  assert(result.type == LispType::Type::number);
+  assert(result.number_val == 2);
+
+  parse_and_eval("(set 'z (list 1 (list 5 4 3 2 1)))", code, result);
+  
   std::cout << "ALL TESTS PASSED!\n\nWelcome to MyLisp.\n";
 
   struct sigaction sa;
