@@ -69,3 +69,30 @@ nil
 [n] 5
 >> 
 ```
+
+Function definitions
+
+```
+Welcome to MyLisp.
+>> (set 'x (list 'markus 'joeri 'maaike 'werner))
+[c] ('markus 'joeri 'maaike 'werner)
+>> (dump)
+x				[c] ('markus 'joeri 'maaike 'werner)
+nil
+>> (set 'idx 0)
+[n] 0
+>> (set 'get-names (quote (nth idx x)))
+[c] (nth idx x)
+>> (eval get-names)
+[s] 'markus
+>> (set 'idx 2)
+[n] 2
+>> (eval get-names)
+[s] 'maaike
+>> (dump)
+get-names		[c] (nth idx x)
+idx				[n] 2
+x				[c] ('markus 'joeri 'maaike 'werner)
+nil
+>>
+```
