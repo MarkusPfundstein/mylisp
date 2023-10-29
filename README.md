@@ -90,9 +90,9 @@ nil
 >> (eval get-names)
 [s] 'maaike
 >> (dump)
-get-names		[c] (nth idx x)
+get-names				[c] (nth idx x)
 idx				[n] 2
 x				[c] ('markus 'joeri 'maaike 'werner)
 nil
->>
+>> 
 ```
