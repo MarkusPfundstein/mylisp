@@ -19,7 +19,7 @@ void sig_handler(int s) {
   }
 }
 
-
+#define DEBUG_TRACE true;
 
 typedef double symbol_number_type;
 
@@ -527,8 +527,6 @@ constexpr const char *const EVAL_KEYWORD = "eval";
 
 void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
 {
-  std::cout << g_indent << "eval: " << code << "\n";
-
   if (code.type == LispType::Type::nil) {
     result = make_nil();
     return;
@@ -536,23 +534,18 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
 
   if (code.type == LispType::Type::cons) {    
     LispType head = code.cons_val->head;
-    std::cout << g_indent << "head: " << head << "\n";
 
     if (head.type == LispType::Type::cons) {
-      std::cout << g_indent << "eval into head\n";
+
       // GOES INTO A FUNCTION
       std::vector<LispType> head_args;
       LispType return_val;
       g_indent.depth++;
       eval(head, return_val, head_args);
       g_indent.depth--;
-      std::cout << g_indent << "return from head: " << return_val << "\n";
-      // RETURN FROM A FUNCTION
+      
       result = return_val;
     } else if (head.type != LispType::Type::function) {
-      std::cout << g_indent << "GOT: ";
-      print_lisp_type(head, true, std::cout);
-      std::cout << "\n";
       result = head;
     }
 
@@ -560,27 +553,18 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
 
     // handle special case quote and eval
     bool eval_tail = true;
-    if (head.type == LispType::Type::function) {
-      if (head.string_val == QUOTE_KEYWORD) {
-        std::cout << g_indent << "QUOTE. Dont eval rest of sexp" << "\n";
+    if (head.type == LispType::Type::function && head.string_val == QUOTE_KEYWORD) {
         eval_tail = false;
-      } else if (head.string_val == EVAL_KEYWORD) {
-        std::cout << g_indent << "EVAL. evaluate tail\n";
-        //    std::cout << tail->head.cons_val->head;
-      }
     }
     if (tail != nullptr) {
       // only eval if no quote
       if (eval_tail) {
-        std::cout << g_indent << "eval into tail\n";
         LispType return_val;
         g_indent.depth++;
         eval(tail->head, return_val, args);
         g_indent.depth--;
-        std::cout << g_indent << "return from tail: " << return_val << "\n";
 
         if (return_val.type != LispType::Type::nil) {
-          std::cout << g_indent << "push arg: " << return_val << "\n";
           args.push_back(return_val);
         }
       } else {
@@ -602,19 +586,6 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
             resolved_vars.push_back(*it);
           }
       }
-
-      std::cout << g_indent << "FN CALL " << "(" << head;
-      if (resolved_vars.size() > 0) {
-        std::cout << " ";
-      }
-      for (auto it = resolved_vars.cbegin(); it != resolved_vars.cend(); ++it) {
-        std::cout << *it;
-        if (it != resolved_vars.cend() - 1) {
-          std::cout << " ";
-        }
-      }
-      std::cout << ")\n";
-
       auto func = g_builtins[head.string_val];
       func(resolved_vars, result);
     }
@@ -630,7 +601,6 @@ void eval(const LispType& code, LispType &result)
   std::vector<LispType> args;
   result = make_nil();
   eval(code, result, args);
-  std::cout << "RESULT: " << result << "\n";
 }
 
 
@@ -764,9 +734,6 @@ int main(int argc, char **argv)
 
   parse_and_eval("(quote (+ x y))", code, result);
 
-  print_lisp_type(result, true, std::cout);
-  std::cout << "\n";
-  
   assert(result.type == LispType::Type::cons);
 
   parse_and_eval("(set 'q (quote (+ x 5)))", code, result);
@@ -775,10 +742,10 @@ int main(int argc, char **argv)
 
   assert(result.type == LispType::Type::number);
   assert(result.number_val == 16);
+
+  g_variables.clear();
   
-  //return 0;
-  
-  std::cout << "ALL TESTS PASSED!\n\nWelcome to MyLisp.\n";
+  std::cout << "ALL STARTUP TESTS PASSED!\n\nWelcome to MyLisp.\n";
 
   struct sigaction sa;
   sa.sa_handler = sig_handler;
@@ -798,7 +765,11 @@ int main(int argc, char **argv)
       parse_and_eval(sexp, code, result);
       print_lisp_type(result, true);
       std::cout << "\n";
-    } catch (const std::runtime_error &e) {
+    } catch (std::runtime_error &e) {
+      std::cout << "Error: " << e.what() << "\n";
+    } catch (std::invalid_argument &e) {
+      std::cout << "Error: " << e.what() << "\n";
+    } catch (std::bad_function_call &e) {
       std::cout << "Error: " << e.what() << "\n";
     }
   }
