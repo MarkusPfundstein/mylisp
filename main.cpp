@@ -419,16 +419,23 @@ void builtin_div(const std::vector<LispType> &args, LispType &result_sym)
   result_sym.number_val = result;
 }
 
-void builtin_print(const std::vector<LispType> &args, LispType &result_sym)
+void builtin_get(const std::vector<LispType> &args, LispType &result_sym)
 {
-  for (auto it = args.cbegin(); it != args.cend(); ++it) {
-    const LispType &symbol = *it;
-    print_lisp_type(symbol, false);
-    if (it != args.cend() - 1) {
-      std::cout << ", ";
-    }
+  if (args.size() != 1) {
+    throw std::runtime_error("only 1 arg allowed in eval");
   }
-  result_sym.type = LispType::Type::nil;
+  if (args[0].type != LispType::Type::symbol) {
+    throw std::runtime_error("get: arg0 must be symbol");
+  }
+  result_sym = g_variables[args[0].string_val];
+}
+
+void builtin_eval(const std::vector<LispType> &args, LispType &result_sym)
+{
+  if (args.size() != 1) {
+    throw std::runtime_error("only 1 arg allowed in eval");
+  }
+  eval(args[0], result_sym);
 }
 
 void builtin_exit(const std::vector<LispType> &args, LispType &result_sym)
@@ -443,7 +450,7 @@ void init_builtins()
   g_builtins["-"] = builtin_min;
   g_builtins["/"] = builtin_div;
   g_builtins["*"] = builtin_mul;
-  g_builtins["print"] = builtin_print;
+  g_builtins["get"] = builtin_get;
   g_builtins["set"] = builtin_set;
   g_builtins["dump"] = builtin_dump_variables;
   g_builtins["cons"] = builtin_cons;
@@ -452,7 +459,8 @@ void init_builtins()
   g_builtins["nth"] = builtin_nth;
   g_builtins["list"] = builtin_list;
   g_builtins["exit"] = builtin_exit;
-  //  g_builtins["quote"] = builtin_quite;
+  g_builtins["eval"] = builtin_eval;
+  // quote is handled in eval directly
 }
 
 bool read_sexp(std::istringstream &input)
@@ -514,6 +522,8 @@ std::ostream& operator<<(std::ostream& o, const Indent &indent)
   return o;
 }
 
+constexpr const char *const QUOTE_KEYWORD = "quote";
+constexpr const char *const EVAL_KEYWORD = "eval";
 
 void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
 {
@@ -545,24 +555,43 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
       std::cout << "\n";
       result = head;
     }
-    
+
     auto tail = code.cons_val->tail;
 
+    // handle special case quote and eval
+    bool eval_tail = true;
+    if (head.type == LispType::Type::function) {
+      if (head.string_val == QUOTE_KEYWORD) {
+        std::cout << g_indent << "QUOTE. Dont eval rest of sexp" << "\n";
+        eval_tail = false;
+      } else if (head.string_val == EVAL_KEYWORD) {
+        std::cout << g_indent << "EVAL. evaluate tail\n";
+        //    std::cout << tail->head.cons_val->head;
+      }
+    }
     if (tail != nullptr) {
-      std::cout << g_indent << "eval into tail\n";
-      LispType return_val;
-      g_indent.depth++;
-      eval(tail->head, return_val, args);
-      g_indent.depth--;
-      std::cout << g_indent << "return from tail: " << return_val << "\n";
+      // only eval if no quote
+      if (eval_tail) {
+        std::cout << g_indent << "eval into tail\n";
+        LispType return_val;
+        g_indent.depth++;
+        eval(tail->head, return_val, args);
+        g_indent.depth--;
+        std::cout << g_indent << "return from tail: " << return_val << "\n";
 
-      if (return_val.type != LispType::Type::nil) {
-        std::cout << g_indent << "push arg: " << return_val << "\n";
-        args.push_back(return_val);
+        if (return_val.type != LispType::Type::nil) {
+          std::cout << g_indent << "push arg: " << return_val << "\n";
+          args.push_back(return_val);
+        }
+      } else {
+        // just assign remainder
+        result = tail->head.cons_val->head;
       }
     }
 
-    if (head.type == LispType::Type::function) {
+    // only apply FN if not quoted
+    if (head.type == LispType::Type::function
+        && head.string_val != QUOTE_KEYWORD) {
 
       std::vector<LispType> resolved_vars;
       for (auto it = args.crbegin(); it != args.crend(); ++it) {
@@ -573,8 +602,7 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
             resolved_vars.push_back(*it);
           }
       }
-      
-      //      std::reverse(args.begin(), args.end());
+
       std::cout << g_indent << "FN CALL " << "(" << head;
       if (resolved_vars.size() > 0) {
         std::cout << " ";
@@ -600,6 +628,7 @@ void eval(const LispType& code, LispType &result, std::vector<LispType> &args)
 void eval(const LispType& code, LispType &result)
 {
   std::vector<LispType> args;
+  result = make_nil();
   eval(code, result, args);
   std::cout << "RESULT: " << result << "\n";
 }
@@ -607,6 +636,7 @@ void eval(const LispType& code, LispType &result)
 
 void parse(std::string sexp, LispType &root)
 {
+  root = make_nil();
   std::istringstream input(sexp);
   std::stringstream stream;
   std::string sym;
@@ -684,7 +714,6 @@ void parse(std::string sexp, LispType &root)
 
 void parse_and_eval(const std::string &sexp, LispType &code, LispType &result)
 {
-  result = make_nil();
   parse(sexp, code);
   eval(code, result);
 }
@@ -727,7 +756,27 @@ int main(int argc, char **argv)
   assert(result.type == LispType::Type::number);
   assert(result.number_val == 2);
 
-  parse_and_eval("(set 'z (list 1 (list 5 4 3 2 1)))", code, result);
+  parse_and_eval("(set 'z (list 1 (list 5 4 3 'a 1)))", code, result);
+  parse_and_eval("(nth 3 (car (cdr z)))", code, result);
+
+  assert(result.type == LispType::Type::symbol);
+  assert(result.string_val == "a");
+
+  parse_and_eval("(quote (+ x y))", code, result);
+
+  print_lisp_type(result, true, std::cout);
+  std::cout << "\n";
+  
+  assert(result.type == LispType::Type::cons);
+
+  parse_and_eval("(set 'q (quote (+ x 5)))", code, result);
+  parse_and_eval("(set 'x 11)", code, result);
+  parse_and_eval("(eval q)", code, result);
+
+  assert(result.type == LispType::Type::number);
+  assert(result.number_val == 16);
+  
+  //return 0;
   
   std::cout << "ALL TESTS PASSED!\n\nWelcome to MyLisp.\n";
 
